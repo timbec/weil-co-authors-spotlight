@@ -1,313 +1,141 @@
 <?php
-/*
-Plugin Name: Weil Co-Authors Spotlight Widge (includes HTML In Author Bio)
-Plugin URI: http://weil.com
-Description: Rebuild of Thomas Fauré's Co-Authors Spotlight Widget which hasn't been updated in six years. Includes 'HTML In Author Bio' for formatting. Works with 'Co-Authors Plus' plugin to output Author Bios for multiple Authors and links to Author's Page.
-Version: 1.2.6
-Author: Tim Beckett
-Author URI: http://tim-beckett.com
-Contributors: mordauk, Utkarsh
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+class Weil_Co_Authors_Spotlight_Widget extends WP_Widget {
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
-Online: http://www.gnu.org/licenses/gpl.txt
-*/
-
-
-final class Featured_Comments {
-
-
-	/** Singleton *************************************************************/
-
-	/**
-	 * @var Featured_Comments
-	 */
-	private static $instance;
-
-	private static $actions;
-
-
-	/**
-	 * Main Featured_Comments Instance
-	 *
-	 * Insures that only one instance of Featured_Comments exists in memory at any one
-	 * time. Also prevents needing to define globals all over the place.
-	 *
-	 * @since v1.0
-	 * @staticvar array $instance
-	 * @see pw_featured_comments_load()
-	 * @return The one true Featured_Comments
-	 */
-	public static function instance() {
-		if ( ! isset( self::$instance ) ) {
-			self::$instance = new Featured_Comments;
-			self::$instance->includes();
-			self::$instance->init();
-			self::$instance->load_textdomain();
-			do_action( 'featured_comments_loaded' );
-		}
-		return self::$instance;
-	}
-
-	private function includes() {
-		include_once( dirname( __FILE__ ) . '/widget.php' );
-	}
-
-	/** Filters & Actions **/
-	private function init() {
-
-		self::$actions = array(
-			'feature'   => __( 'Feature',   'featured-comments' ),
-			'unfeature' => __( 'Unfeature', 'featured-comments' ),
-			'bury'      => __( 'Bury',      'featured-comments' ),
-			'unbury'    => __( 'Unbury',    'featured-comments' )
+	public function __construct() {
+		parent::__construct(
+			'widget-name-id',
+			__( 'Weil Co-Authors Spotlight Widget', 'weil-co-authors-spotlight-widget' ),
+			array(
+				'classname'		=>	'weil-co-authors-spotlight-widget',
+				'description'	=>	__( 'Displays co-authors image and meta information in sidebar widget".', 'weil-co-authors-spotlight-widget' )
+			)
 		);
 
-		/* Backend */
-		add_action( 'edit_comment',             array( $this, 'save_meta_box_postdata' ) );
-		add_action( 'admin_menu',               array( $this, 'add_meta_box'           ) );
-		add_action( 'wp_ajax_feature_comments', array( $this, 'ajax'                   ) );
-		add_filter( 'comment_text',             array( $this, 'comment_text'           ), 10, 3 );
-		add_filter( 'comment_row_actions',      array( $this, 'comment_row_actions'    ) );
-
-		add_action( 'wp_print_scripts',         array( $this, 'print_scripts'          ) );
-		add_action( 'admin_print_scripts',      array( $this, 'print_scripts'          ) );
-		add_action( 'wp_print_styles',          array( $this, 'print_styles'           ) );
-		add_action( 'admin_print_styles',       array( $this, 'print_styles'           ) );
-
-		/* Frontend */
-		add_filter( 'comment_class',            array( $this, 'comment_class'          ) );
-
-	}
-
-	function load_textdomain() {
-
-		// Set filter for plugin's languages directory
-		$lang_dir = dirname( plugin_basename( __FILE__ ) ) . '/languages/';
-		$lang_dir = apply_filters( 'featured_comments_languages_directory', $lang_dir );
+	} // end constructor
 
 
-		// Traditional WordPress plugin locale filter
-		$locale        = apply_filters( 'plugin_locale',  get_locale(), 'featured-comments' );
-		$mofile        = sprintf( '%1$s-%2$s.mo', 'edd', $locale );
+	/**
+	 * Outputs the content of the widget.
+	 *
+	 * @param	array	args		The array of form elements
+	 * @param	array	instance	The current instance of the widget
+	 */
+	public function widget( $args, $instance ) {
 
-		// Setup paths to current locale file
-		$mofile_local  = $lang_dir . $mofile;
-		$mofile_global = WP_LANG_DIR . '/featured-comments/' . $mofile;
+		global $authordata;
+		extract( $args ); // extract arguments
+		if(!is_home() and (is_page() or is_single())){
+			$printit = True;
+			$i = new CoAuthorsIterator();
+			//This is the part that doesn't work. Returns an empty object 
+			$options = get_option('widget'); // get options 
+			var_dump($options);   
 
-		if ( file_exists( $mofile_global ) ) {
-			// Look in global /wp-content/languages/featured-comments folder
-			load_textdomain( 'featured-comments', $mofile_global );
-		} elseif ( file_exists( $mofile_local ) ) {
-			// Look in local /wp-content/plugins/featured-comments/languages/ folder
-			load_textdomain( 'featured-comments', $mofile_local );
-		} else {
-			// Load the default language files
-			load_plugin_textdomain( 'featured-comments', false, $lang_dir );
-		}
-
-	}
-
-	// Scripts
-	function print_scripts() {
-		if ( current_user_can( 'moderate_comments' ) ) {
-			wp_enqueue_script( 'featured_comments', plugin_dir_url( __FILE__ ) . 'feature-comments.js', array( 'jquery' ), filemtime( dirname( __FILE__ ) . '/feature-comments.js' ) );
-			wp_localize_script( 'featured_comments', 'featured_comments', array(
-				'ajax_url' => admin_url( 'admin-ajax.php' )
-			) );
-		}
-	}
-
-	// Styles
-	function print_styles() {
-		if ( current_user_can( 'moderate_comments' ) ) {
-?>
-			<style>
-				.feature-comments.unfeature, .feature-comments.unbury {display:none;}
-				.feature-comments { cursor:pointer;}
-				.featured.feature-comments.feature { display:none;}
-				.featured.feature-comments.unfeature { display:inline;}
-				.buried.feature-comments.bury { display:none;}
-	            .buried.feature-comments.unbury { display:inline;}
-				#the-comment-list tr.featured { background-color: #dfd; }
-				#the-comment-list tr.buried { opacity: 0.5; }
-			</style>
-<?php
-		}
-	}
-
-
-	function ajax() {
-
-		if ( ! isset( $_POST['do'] ) ) die;
-
-		$action = $_POST['do'];
-
-		$actions = array_keys( self::$actions );
-
-		if ( in_array( $action, $actions ) ) {
-
-			$comment_id = absint( $_POST['comment_id'] );
-			$comment    = get_comment( $comment_id );
-
-			if ( ! $comment ) {
-				die;
+			if($i->count() == 1){
+				$i->iterate();
+				if($authordata->user_nicename==$options['author2exclude']){$printit = False;}
 			}
-
-			if( ! current_user_can( 'edit_comment', $comment_id ) ) {
-				die;
-			}
-
-			if( ! wp_verify_nonce( $_POST['nonce'], 'featured_comments' ) ) {
-				die;
-			}
-
-			switch ( $action ) {
-
-				case 'feature':
-					update_comment_meta( $comment_id, 'featured', '1' );
-					break;
-
-				case 'unfeature':
-					update_comment_meta( $comment_id, 'featured', '0' );
-					break;
-
-				case 'bury':
-                    update_comment_meta( $comment_id, 'buried', '1');
-                break;
-
-                case 'unbury':
-                    update_comment_meta( $comment_id, 'buried', '0');
-                break;
-
-                die( wp_create_nonce( 'featured_comments' ) );
-
+			if($printit){
+				$i = new CoAuthorsIterator();
+				echo $before_widget;
+				echo $before_title . $options['title'] . $after_title;
+				while($i->iterate()){
+					if($authordata->user_nicename!=$options['author2exclude']){
+						$author_posts_link = get_author_posts_url($authordata->ID, $authordata->user_nicename );
+						//Display author name. Uses deprecated method. 
+						echo '<h4 id="author_name">'.get_the_author_firstname().' '.get_the_author_lastname().'</h4>';
+						//Display author URL, if present
+						if($authordata->user_url && !('http://' == $authordata->user_url)) : 
+							echo '<b>'. $options['websitetext'] . '</b> <a target="_blank" title="'.get_the_author_url().'" href="'.get_the_author_url().'">'.get_the_author_url().'</a><br/>';
+						endif; 
+						echo "<div class='author-profile-avatar'>";
+						//Display User photo/gravatar
+						if(function_exists('userphoto_exists') && userphoto_exists($authordata)){
+							userphoto_thumbnail($authordata);
+						}
+						else {
+							echo get_avatar($authordata->ID, 96);
+						}
+						echo "</div>";
+						//Display author profile, with link to full profile
+						echo '<div id="author_profile">'. get_the_author_description() .'<ul><li><a href="'.$author_posts_link.'" title="Read full Profile">'. 'More Articles By Contributor' .'</a></li></ul></div>';
+						echo $i->is_last() ? '<div id="coauthorsspotlight_widget_end"></div>' : '<div class="coauthorsspotlight_widget_sep"></div>';
+					}
+				}
+				echo $after_widget;  
 			}
 		}
-		die;
-	}
+		// output done
+		return;
+	} // end widget
 
-	function comment_text( $comment_text ) {
-		if( is_admin() || ! current_user_can( 'moderate_comments' ) ) {
-			return $comment_text;
+	function cosnippet($text, $length=1000, $tail="...") {
+		$text = trim($text);
+		$txtl = strlen($text);
+		if($txtl > $length) {
+			for($i=1;$text[$length-$i]!=" ";$i++) {
+				if($i == $length) {
+					return substr($text,0,$length) . $tail;
+				}
+			}
+			$text = substr($text,0,$length-$i+1) . $tail;
 		}
-
-		global $comment;
-
-		$comment_id = $comment->comment_ID;
-		$data_id    = ' data-comment_id=' . $comment_id;
-
-		$current_status = implode( ' ', self::comment_class() );
-		$output = '<div class="feature-burry-comments">';
-		foreach( self::$actions as $action => $label ) {
-                $output .= "<a class='feature-comments {$current_status} {$action}' data-do='{$action}' {$data_id} data-nonce='" . wp_create_nonce( "featured_comments" ) . "' title='{$label}'>{$label}</a> "; }
-		$output .= '</div>';
-
-		return $comment_text . $output;
-    }
-
-	function comment_row_actions( $actions ) {
-
-		global $comment, $post, $approve_nonce;
-
-		$comment_id = $comment->comment_ID;
-
-		$data_id = ' data-comment_id=' . $comment->comment_ID;
-
-		$current_status = implode( ' ', self::comment_class() );
-
-		$o = '';
-		$o .= "<a data-do='unfeature' {$data_id} data-nonce='" . wp_create_nonce( 'featured_comments' ) . "' class='feature-comments unfeature {$current_status} dim:the-comment-list:comment-{$comment->comment_ID}:unfeatured:e7e7d3:e7e7d3:new=unfeatured vim-u' title='" . esc_attr__( 'Unfeature this comment', 'featured-comments' ) . "'>" . __( 'Unfeature', 'featured-comments' ) . '</a>';
-		$o .= "<a data-do='feature' {$data_id} data-nonce='" . wp_create_nonce( 'featured_comments' ) . "' class='feature-comments feature {$current_status} dim:the-comment-list:comment-{$comment->comment_ID}:unfeatured:e7e7d3:e7e7d3:new=featured vim-a' title='" . esc_attr__( 'Feature this comment', 'featured-comments' ) . "'>" . __( 'Feature', 'featured-comments' ) . '</a>';
-		$o .= ' | ';
-		$o .= "<a data-do='unbury' {$data_id} data-nonce='" . wp_create_nonce( 'featured_comments' ) . "' class='feature-comments unbury {$current_status} dim:the-comment-list:comment-{$comment->comment_ID}:unburied:e7e7d3:e7e7d3:new=unburied vim-u' title='" . esc_attr__( 'Unbury this comment', 'featured-comments' ) . "'>" . __( 'Unbury', 'featured-comments' ) . '</a>';
-		$o .= "<a data-do='bury' {$data_id}  data-nonce='" . wp_create_nonce( 'featured_comments' ) . "' class='feature-comments bury {$current_status} dim:the-comment-list:comment-{$comment->comment_ID}:unburied:e7e7d3:e7e7d3:new=buried vim-a' title='" . esc_attr__( 'Bury this comment', 'featured-comments' ) . "'>" . __( 'Bury', 'featured-comments' ) . '</a>';
-		$o = "<span class='$current_status'>$o</span>";
-
-		$actions['feature_comments'] = $o;
-
-		return $actions;
-	}
-
-	function add_meta_box() {
-		add_meta_box( 'comment_meta_box', __( 'Featured Comments', 'featured-comments' ), array( $this, 'comment_meta_box' ), 'comment', 'normal' );
-	}
-
-	function save_meta_box_postdata( $comment_id ) {
-
-		if ( ! wp_verify_nonce( $_POST['featured_comments_nonce'], plugin_basename( __FILE__ ) ) ) {
-			return;
-		}
-
-		if ( !current_user_can( 'moderate_comments', $comment_id ) ) {
-			comment_footer_die( __( 'You are not allowed to edit comments on this post.', 'featured-comments' ) );
-		}
-
-		update_comment_meta( $comment_id, 'featured', isset( $_POST['featured'] ) ? '1' : '0' );
-		update_comment_meta( $comment_id, 'buried',   isset( $_POST['buried'] )   ? '1' : '0' );
-	}
-
-	function comment_meta_box() {
-
-		global $comment;
-		$comment_id = $comment->comment_ID;
-		echo '<p>';
-		echo wp_nonce_field( plugin_basename( __FILE__ ), 'featured_comments_nonce' );
-		echo '<input id = "featured" type="checkbox" name="featured" value="true"' . checked( true, self::is_comment_featured( $comment_id ), false ) . '/>';
-		echo ' <label for="featured">' . __( "Featured", 'featured-comments' ) . '</label>&nbsp;';
-		echo '<input id = "buried" type="checkbox" name="buried" value="true"' . checked( true, self::is_comment_buried( $comment_id ), false ) . '/>';
-		echo ' <label for="buried">' . __( "Buried", 'featured-comments' ) . '</label>';
-		echo '</p>';
-	}
-
-	function comment_class( $classes = array() ) {
-		global $comment;
-
-		$comment_id = $comment->comment_ID;
-
-		if ( self::is_comment_featured( $comment_id ) ) {
-			$classes[] = 'featured';
-		}
-
-		if( self::is_comment_buried( $comment_id ) ) {
-			$classes [] = 'buried';
-		}
-
-		return $classes;
-	}
-
-	private function is_comment_featured( $comment_id ) {
-		if ( '1' == get_comment_meta( $comment_id, 'featured', true ) ) {
-			return 1;
-		}
-		return 0;
+		return $text;
 	}
 
 
-	private static function is_comment_buried( $comment_id ) {
-	    if( '1' == get_comment_meta( $comment_id, 'buried', true ) ) {
-	        return 1;
-	    }
-	    return 0;
+	/**
+	 * Generates the administration form for the widget.
+	 *
+	 * @param	array	instance	The array of keys and values for the widget.
+	 */
+
+	 //This has to be updated to modern methods. Not reading otherwise. 
+	public function form( $instance ) {
+
+		$options = $newoptions = get_option('coauthorsspotlight_widget');
+		var_dump($options);  // get options
+	// set new options
+	if( $_POST['coauthorsspotlight-widget-submit'] ) {
+		$newoptions['title'] = strip_tags( stripslashes($_POST['coauthorsspotlight-widget-title']) );
+		$newoptions['readfulltext'] = strip_tags( stripslashes($_POST['coauthorsspotlight-readfull-text']) );
+		$newoptions['moretext'] = strip_tags( stripslashes($_POST['coauthorsspotlight-moreposts-text']) );
+		$newoptions['websitetext'] = strip_tags( stripslashes($_POST['coauthorsspotlight-website-text']) );
+		$newoptions['charlimit'] = strip_tags( stripslashes($_POST['coauthorsspotlight-char-limit']) );
+		$newoptions['author2exclude'] = strip_tags( stripslashes($_POST['coauthorsspotlight-author2exclude']) );
+
 	}
+	// update options if needed
+	if( $options != $newoptions ) {
+		$options = $newoptions;
+		update_option('coauthorsspotlight_widget', $options);
+	}
+	// output
+	echo '<p>'._e('Title');
+	echo '<input type="text" style="width:250px" id="coauthorsspotlight-widget-title" name="coauthorsspotlight-widget-title" value="'.attribute_escape($options['title']).'" />';
+	echo '</p>';
+	echo '<p>'._e('"<i>Website</i>" text');
+	echo '<input type="text" style="width:250px" id="coauthorsspotlight-website-text" name="coauthorsspotlight-website-text" value="'.attribute_escape($options['websitetext']).'" />';
+	echo '</p>';
+	echo '<p>'._e('<i>"More articles by author"</i> text');
+	echo '<input type="text" style="width:250px" id="coauthorsspotlight-moreposts-text" name="coauthorsspotlight-moreposts-text" value="'.attribute_escape($options['moretext']).'" />';
+	echo '</p>';
+	echo '<p>'._e('Author profile character limit');
+	echo '<input type="text" style="width:250px" id="coauthorsspotlight-char-limit" name="coauthorsspotlight-char-limit" value="'.attribute_escape($options['charlimit']).'" />';
+	echo '</p>';
+	echo '<p>'._e('Author to exclude');
+	echo '<input type="text" style="width:250px" id="coauthorsspotlight-author2exclude" name="coauthorsspotlight-author2exclude" value="'.attribute_escape($options['author2exclude']).'" />';
+	echo '</p>';
+	echo '<p>'._e('<i>"Read full profile"</i> text');
+	echo '<input type="text" style="width:250px" id="coauthorsspotlight-readfull-text" name="coauthorsspotlight-readfull-text" value="'.attribute_escape($options['readfulltext']).'" />';
+	echo '</p>';
+	echo '<p><small><strong>Note:</strong> To display custom photos with User Profiles, please install/activate the <a href="http://wordpress.org/extend/plugins/user-photo">User photo</a> plugin and upload the photo from profile page.</small></p>';
+	echo '<input type="hidden" name="coauthorsspotlight-widget-submit" id="coauthorsspotlight-widget-submit" value="1" />';
 
-}
+	} // end form
 
 
-function wp_featured_comments_load() {
-	return Featured_Comments::instance();
-}
+} // end Weil_Co_Authors_Spotlight_Widget Class
 
-// load Easy Featured Comments
-wp_featured_comments_load();
+add_action( 'widgets_init', create_function( '', 'register_widget("Weil_Co_Authors_Spotlight_Widget");' ) );
