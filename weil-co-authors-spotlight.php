@@ -50,6 +50,7 @@ class Weil_Co_Authors_Spotlight {
 		if ( ! isset( self::$instance ) ) {
 			self::$instance = new Weil_Co_Authors_Spotlight;
 			self::$instance->includes();
+			self::$instance->init(); 
 			do_action( 'weil_co_authors_spotlight_loaded' );
 		}
 		return self::$instance;
@@ -59,6 +60,18 @@ class Weil_Co_Authors_Spotlight {
 		include_once( dirname( __FILE__ ) . '/weil-html-in-author-bio.php' );
 		include_once( dirname( __FILE__ ) . '/weil-co-authors-spotlight-widget.php' );
 	}
+
+	public function init() {
+		add_action( 'wp_print_styles',          array( $this, 'print_styles' ) );
+	}
+
+	public function print_styles() { ?>
+		<style>
+			#author_profile {
+				clear: left; 
+		}
+		</style>
+	<?php	}
 }
 
 
