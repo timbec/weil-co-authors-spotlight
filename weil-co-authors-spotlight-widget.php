@@ -25,11 +25,18 @@ class Weil_Co_Authors_Spotlight_Widget extends WP_Widget {
 
 /********NEEDS TO ITERATE IN CASE THERE IS MORE THAN ONE AUTHOR********/
 		global $authordata;
+		var_dump($authordata); 
 		extract( $args ); // extract arguments
 		if(!is_home() and (is_page() or is_single())){
 			echo $args['before_widget'];
 				if ( ! empty( $instance['title'] ) ) {
 					echo $args['before_title'] . apply_filters( 'widget_title', $instance['title'] ) . $args['after_title'];
+				}
+			$i = new CoAuthorsIterator();
+				$printit = True; 
+				if($i->count() == 1){
+					$i->iterate();
+					if($authordata->user_nicename){$printit = False;}
 				}
 			$i = new CoAuthorsIterator();
 			while($i->iterate()){
