@@ -25,7 +25,6 @@ class Weil_Co_Authors_Spotlight_Widget extends WP_Widget {
 
 /********NEEDS TO ITERATE IN CASE THERE IS MORE THAN ONE AUTHOR********/
 		global $authordata;
-		var_dump($authordata); 
 		extract( $args ); // extract arguments
 		if(!is_home() and (is_page() or is_single())){
 			echo $args['before_widget'];
@@ -33,7 +32,7 @@ class Weil_Co_Authors_Spotlight_Widget extends WP_Widget {
 					echo $args['before_title'] . apply_filters( 'widget_title', $instance['title'] ) . $args['after_title'];
 				}
 			$i = new CoAuthorsIterator();
-				$printit = True; 
+				$printit = True;
 				if($i->count() == 1){
 					$i->iterate();
 					if($authordata->user_nicename){$printit = False;}
@@ -64,7 +63,7 @@ class Weil_Co_Authors_Spotlight_Widget extends WP_Widget {
 			// output done
 			} //end iteration
 			echo $args['after_widget'];
-			return; 
+			return;
 		}
 
 	function cosnippet($text, $length=1000, $tail="...") {
@@ -92,7 +91,7 @@ class Weil_Co_Authors_Spotlight_Widget extends WP_Widget {
 		$title = ! empty( $instance['title'] ) ? $instance['title'] : esc_html__( 'New title', 'text_domain' );
 		?>
 		<p>
-		<label for="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>"><?php esc_attr_e( 'Title:', 'text_domain' ); ?></label> 
+		<label for="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>"><?php esc_attr_e( 'Title:', 'text_domain' ); ?></label>
 		<input class="widefat" id="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'title' ) ); ?>" type="text" value="<?php echo esc_attr( $title ); ?>">
 		</p>
 
